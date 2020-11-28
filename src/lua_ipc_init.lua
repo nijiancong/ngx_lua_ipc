@@ -1,6 +1,9 @@
 local ipc = ...
 local ngx = ngx
 local tablepool = require "tablepool"
+require "resty.core"
+local semaphore = require "ngx.semaphore"
+local ngx_worker = ngx.worker
 local pool_name = "ngx_lua_ipc"
 
 local _M = { _VERSION = '0.1' }
@@ -69,30 +72,37 @@ end
 local Queue = _M
 local handler_queue = Queue:new()
 local handlering = false
+local handler_sema = semaphore.new()
 local handlers = {}
 local sender = {}
 local cache_slot2pid = {}
 local cache_pid2slot = {}
 
 local function to_handler()
-    handlering = true
-    local i = 0
-    local v = handler_queue:lpop()
-    while v do
-        sender.pid = v[1]
-        sender.slot = v[2]
-        ipc.sender = sender
-        handlers[v[3] ](v[4])
-        ipc.sender = nil
-        i = i + 1
-        if i == 200 then
-            ngx.sleep(0)
-            i = 0
+    while not ngx_worker.exiting() do
+        handlering = true
+        local i = 0
+        local v = handler_queue:lpop()
+        while v do
+            sender.pid = v[1]
+            sender.slot = v[2]
+            ipc.sender = sender
+            handlers[v[3] ](v[4])
+            ipc.sender = nil
+            i = i + 1
+            if i == 200 then
+                ngx.sleep(0)
+                i = 0
+            end
+            tablepool.release(pool_name, v, true)
+            v = handler_queue:lpop()
         end
-        tablepool.release(pool_name, v, true)
-        v = handler_queue:lpop()
+        handlering = false
+        local sem_ok, sem_err
+        while not sem_ok and not ngx_worker.exiting() do
+            sem_ok, sem_err = handler_sema:wait(3)
+        end
     end
-    handlering = false
 end
 
 local handler = function(pid, slot, name, data)
@@ -103,7 +113,8 @@ local handler = function(pid, slot, name, data)
     v[4] = data
     handler_queue:rpush(v)
     if not handlering then
-        to_handler()
+        handlering = true
+        handler_sema:post(1)
     end
 end
 
@@ -166,6 +177,8 @@ end)
 ngx.timer.at(0.001, function(premature)
     ipc.broadcast("_lua_ipc_init_", "Hello every one!")
 end)
+
+ngx.timer.at(0, to_handler)
 
 ipc.handler = handler
 ipc.handlers = handlers

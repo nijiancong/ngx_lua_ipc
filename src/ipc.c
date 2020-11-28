@@ -825,13 +825,14 @@ ngx_int_t ipc_alert_pid(ipc_t* ipc, ngx_pid_t worker_pid, ngx_str_t* name, ngx_s
     return ipc_alert_slot(ipc, slot, name, data);
 }
 
-ngx_int_t ipc_alert_all_workers(ipc_t* ipc, ngx_str_t* name, ngx_str_t* data) {
+ngx_int_t ipc_alert_all_workers(ipc_t* ipc, ngx_str_t* name, ngx_str_t* data, int other) {
     ipc_shm_data_t* shdata = ipc->shm;
     int max_workers = shdata->process_count;
     int i = 0;
     int rc = NGX_OK, trc = 0;
 
     for (i = 0; i < max_workers; ++i) {
+        if (other && i == (int)ngx_worker) continue;
         trc = ipc_alert_slot(ipc, i, name, data);
         if (trc != NGX_OK) {
             rc = trc;

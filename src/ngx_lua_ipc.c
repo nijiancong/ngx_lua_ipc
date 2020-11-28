@@ -77,7 +77,7 @@ static void ngx_lua_ipc_alert_handler(ipc_t* ipc, ngx_pid_t sender_pid, ngx_uint
     lua_pushlstring(L, (char *) data->data, data->len);
     lua_pushcfunction(L, ngx_lua_ipc_traceback);
     lua_insert(L, base1);
-    status = lua_pcall(L, 4, 0, 1);
+    status = lua_pcall(L, 4, 0, base1);
     lua_remove(L, base1);
     if (status != 0) {
         err_msg = (u_char *) lua_tolstring(L, -1, &len);
@@ -147,7 +147,18 @@ static int ngx_lua_ipc_broadcast_alert(lua_State* L) {
 
     ipc->last_error[0] = '\0';
     ngx_lua_ipc_get_alert_args(L, 0, &name, &data);
-    rc = ipc_alert_all_workers(ipc, &name, &data);
+    rc = ipc_alert_all_workers(ipc, &name, &data, 0);
+
+    return push_ipc_return_value(L, rc == NGX_OK);
+}
+
+static int ngx_lua_ipc_broadcast_other_alert(lua_State* L) {
+    ngx_str_t name, data;
+    ngx_int_t rc = 0;
+
+    ipc->last_error[0] = '\0';
+    ngx_lua_ipc_get_alert_args(L, 0, &name, &data);
+    rc = ipc_alert_all_workers(ipc, &name, &data, 1);
 
     return push_ipc_return_value(L, rc == NGX_OK);
 }
@@ -225,7 +236,7 @@ static int ngx_lua_ipc_init_lua_code(lua_State* L) {
         lmcf->L = L;
     }
     int t = lua_gettop(L) + 1;
-    lua_createtable(L, 0, 7);
+    lua_createtable(L, 0, 8);
 
     lua_pushcfunction(L, ngx_lua_ipc_send_alert_by_pid);
     lua_setfield(L, t, "send_by_pid");
@@ -235,6 +246,9 @@ static int ngx_lua_ipc_init_lua_code(lua_State* L) {
 
     lua_pushcfunction(L, ngx_lua_ipc_broadcast_alert);
     lua_setfield(L, t, "broadcast");
+
+    lua_pushcfunction(L, ngx_lua_ipc_broadcast_other_alert);
+    lua_setfield(L, t, "broadcast_other");
 
     lua_pushcfunction(L, ngx_lua_ipc_get_worker_slot);
     lua_setfield(L, t, "get_worker_slot");
@@ -254,7 +268,7 @@ static int ngx_lua_ipc_init_lua_code(lua_State* L) {
         base = t + 1; /* function index */
         lua_pushcfunction(L, ngx_lua_ipc_traceback);  /* push traceback function */
         lua_insert(L, base);  /* put it under chunk and args */
-        status = lua_pcall(L, 1, 0, 1);
+        status = lua_pcall(L, 1, 0, base);
         lua_remove(L, base);
     }
     if (status && !lua_isnil(L, -1)) {

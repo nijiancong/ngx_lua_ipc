@@ -102,7 +102,7 @@ ngx_int_t ipc_alert_pid(ipc_t* ipc, ngx_pid_t pid, ngx_str_t* name, ngx_str_t* d
 ngx_pid_t* ipc_get_worker_pids(ipc_t* ipc, int* pid_count);
 ngx_int_t* ipc_get_worker_slots(ipc_t* ipc, int* pid_count);
 
-ngx_int_t ipc_alert_all_workers(ipc_t* ipc, ngx_str_t* name, ngx_str_t* data); //poor man's broadcast
+ngx_int_t ipc_alert_all_workers(ipc_t* ipc, ngx_str_t* name, ngx_str_t* data, int other); //poor man's broadcast
 
 ipc_stats_t* ipc_get_stats(ipc_t* ipc);
 
